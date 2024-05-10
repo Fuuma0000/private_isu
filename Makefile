@@ -26,7 +26,7 @@ db:
 	docker compose exec -it mysql bash
 
 mysql:
-	docker compose exec -it mysql mysql -uroot -prooot isuconp
+	docker compose exec -it mysql mysql -uroot -p isuconp
 
 bench:
 	docker run --rm --network host -i private-isu-benchmarker /opt/go/bin/benchmarker -t http://localhost -u ./userdata
