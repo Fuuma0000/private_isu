@@ -43,4 +43,7 @@ alpa:
 pt:
 	pt-query-digest logs/mysql/slow-query.log
 
+rotate:
+	docker compose exec -it nginx /bin/sh -c "mv /var/log/nginx/access.log /var/log/nginx/access.log.$$(date +'%Y%m%d%H%M%S') && nginx -s reopen"
+
 PHONY: bench
