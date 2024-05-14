@@ -31,4 +31,16 @@ mysql:
 bench:
 	docker run --rm --network host -i private-isu-benchmarker /opt/go/bin/benchmarker -t http://localhost -u ./userdata
 
+alp:
+	cat logs/nginx/access.log | alp ltsv -m="^/posts/[0-9]+","^/image/[0-9]+\.(jpg|png|gif)","^/@[a-z]*" --reverse
+
+alps:
+	cat logs/nginx/access.log | alp ltsv -m="^/posts/[0-9]+","^/image/[0-9]+\.(jpg|png|gif)","^/@[a-z]*" --reverse --sort=sum
+
+alpa:
+	cat logs/nginx/access.log | alp ltsv -m="^/posts/[0-9]+","^/image/[0-9]+\.(jpg|png|gif)","^/@[a-z]*" --reverse --sort=avg
+
+pt:
+	pt-query-digest logs/mysql/slow-query.log
+
 PHONY: bench
