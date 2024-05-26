@@ -174,6 +174,121 @@ func getFlash(w http.ResponseWriter, r *http.Request, key string) string {
 func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, error) {
 	var posts []Post
 
+	// ポストのIDを取得
+	postIDs := make([]int, len(results))
+	for i, p := range results {
+		postIDs[i] = p.ID
+	}
+
+	// ポストごとのコメント数を取得
+	var commentCounts []struct {
+		PostID int `db:"post_id"`
+		Count  int `db:"count"`
+	}
+	query, args, err := sqlx.In("SELECT post_id, COUNT(*) AS count FROM comments WHERE post_id IN (?) GROUP BY post_id", postIDs)
+	if err != nil {
+		return nil, err
+	}
+	query = db.Rebind(query)
+	err = db.Select(&commentCounts, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	// ポストごとのコメント数をマップに変換
+	commentCountMap := make(map[int]int)
+	for _, cc := range commentCounts {
+		commentCountMap[cc.PostID] = cc.Count
+	}
+
+	// コメントをポストごとに取得
+	commentsMap := make(map[int][]Comment)
+	for _, postID := range postIDs {
+		var comments []Comment
+		query := "SELECT * FROM comments WHERE post_id = ? ORDER BY created_at DESC"
+		if !allComments {
+			query += " LIMIT 3"
+		}
+		err := db.Select(&comments, query, postID)
+		if err != nil {
+			return nil, err
+		}
+		commentsMap[postID] = comments
+	}
+
+	// コメントのユーザーIDを取得
+	userIDs := make(map[int]struct{})
+	// 受け取ったポストのユーザーIDを取得
+	for _, p := range results {
+		userIDs[p.UserID] = struct{}{}
+	}
+	// コメントのユーザーIDを取得
+	for _, comments := range commentsMap {
+		for _, comment := range comments {
+			userIDs[comment.UserID] = struct{}{}
+		}
+	}
+
+	// ユーザーIDをスライスに変換
+	var userIDsSlice []int
+	for id := range userIDs {
+		userIDsSlice = append(userIDsSlice, id)
+	}
+
+	// ユーザー情報を取得
+	var users []User
+	query, args, err = sqlx.In("SELECT * FROM users WHERE id IN (?)", userIDsSlice)
+	if err != nil {
+		return nil, err
+	}
+	query = db.Rebind(query)
+	err = db.Select(&users, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	// ユーザー情報をマップに変換
+	userMap := make(map[int]User)
+	for _, user := range users {
+		userMap[user.ID] = user
+	}
+
+	// ポストごとにコメントを割り当てる
+	for _, p := range results {
+		// コメント数を割り当てる
+		p.CommentCount = commentCountMap[p.ID]
+		// コメントを割り当てる
+		p.Comments = commentsMap[p.ID]
+
+		// ポストのユーザーを割り当てる
+		p.User = userMap[p.UserID]
+
+		// コメントのユーザーを割り当てる
+		for i := range p.Comments {
+			p.Comments[i].User = userMap[p.Comments[i].UserID]
+		}
+
+		// コメントを逆順にする
+		for i, j := 0, len(p.Comments)-1; i < j; i, j = i+1, j-1 {
+			p.Comments[i], p.Comments[j] = p.Comments[j], p.Comments[i]
+		}
+
+		p.CSRFToken = csrfToken
+
+		if p.User.DelFlg == 0 {
+			posts = append(posts, p)
+		}
+		if len(posts) >= postsPerPage {
+			break
+		}
+	}
+
+	return posts, nil
+}
+
+func makePostsOld(results []Post, csrfToken string, allComments bool) ([]Post, error) {
+	var posts []Post
+
 	//TODO: N+1問題
 	for _, p := range results {
 		err := db.Get(&p.CommentCount, "SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
@@ -388,7 +503,7 @@ func getIndex(w http.ResponseWriter, r *http.Request) {
 
 	results := []Post{}
 
-	err := db.Select(&results, "SELECT `id`, `user_id` FROM `posts` ORDER BY `created_at` DESC LIMIT 20")
+	err := db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC LIMIT 20")
 	if err != nil {
 		log.Print(err)
 		return
