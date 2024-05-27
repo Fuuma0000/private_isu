@@ -48,5 +48,11 @@ rotate:
 
 top:
 	docker compose exec -it app top
+
+restart-app:
+	docker compose build --no-cache app && docker compose up -d app
+
+restart-nginx:
+	docker compose build --no-cache nginx && docker compose up -d nginx
 	
 PHONY: bench
